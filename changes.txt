@@ -1,3 +1,15 @@
+===========  HISTORY PngCs fork https://github.com/WarpZephyr/pngcs ================
+
+30/Sep/2024: 1.0.0
+   - Reworked most library code into a different style.
+   - Removed the library's own exception types.
+   - Added various pixel data/color types to make reading and writing easier.
+     -- System.Color only supports 8-bits per channel, and not the 16 that PNG does.
+	   -- Going from 16-bit values to 8-bit values takes the most significant bits ((byte)(Channel >> 8)).
+	 -- In the case that System.Color is for some reason not usable, these were added.
+	   -- This reason isn't very good and they may be subject to change later.
+   - Added methods to read and write color types, mainly System.Color, to ImageLine.
+
 ===========  HISTORY PngCs  http://code.google.com/p/pngcs/ ================
 
 15/Dec/2012:  1.1.4

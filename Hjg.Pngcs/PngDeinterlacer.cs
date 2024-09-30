@@ -1,245 +1,279 @@
-﻿using Hjg.Pngcs;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System;
 
-namespace Hjg.Pngcs {
-    class PngDeinterlacer {
-        private readonly ImageInfo imi;
-        private int pass; // 1-7
-        private int rows, cols, dY, dX, oY, oX, oXsamples, dXsamples; // at current pass
-        // current row in the virtual subsampled image; this incrementes from 0 to cols/dy 7 times
-        private int currRowSubimg = -1;
-        // in the real image, this will cycle from 0 to im.rows in different steps, 7 times
-        private int currRowReal = -1;
-        private readonly int packedValsPerPixel;
-        private readonly int packedMask;
-        private readonly int packedShift;
-        private int[][] imageInt; // FULL image -only used for PngReader as temporary storage
-        private byte[][] imageByte;
+namespace Hjg.Pngcs
+{
+    /// <summary>
+    /// Deinterlaces read PNG data.
+    /// </summary>
+    internal class PngDeinterlacer
+    {
+        private readonly ImageInfo _imageInfo;
 
-        internal PngDeinterlacer(ImageInfo iminfo) {
-            this.imi = iminfo;
-            pass = 0;
-            if (imi.Packed) {
-                packedValsPerPixel = 8 / imi.BitDepth;
-                packedShift = imi.BitDepth;
-                if (imi.BitDepth == 1)
-                    packedMask = 0x80;
-                else if (imi.BitDepth == 2)
-                    packedMask = 0xc0;
+        /// <summary>
+        /// Current pass number (1-7).
+        /// </summary>
+        private int _pass;
+
+        // Values at the current pass
+        private int _rows; 
+        private int _columns;
+        private int _dY;
+        private int _dX;
+        private int _oY;
+        private int _oX;
+        private int _oXsamples;
+        private int _dXsamples;
+
+        // Current row in the virtual subsampled image; this increments from 0 to cols/dy 7 times.
+        private int _currentRowSubImage = -1;
+
+        // In the real image, this will cycle from 0 to im.rows in different steps, 7 times
+        private int _currentRowReal = -1;
+        private readonly int _packedValsPerPixel;
+        private readonly int _packedMask;
+        private readonly int _packedShift;
+
+        public int[][] ImageInt { get; set; } // FULL image -only used for PngReader as temporary storage
+        public byte[][] ImageByte { get; set; }
+
+        internal PngDeinterlacer(ImageInfo imageInfo)
+        {
+            _imageInfo = imageInfo;
+            _pass = 0;
+            if (_imageInfo.Packed)
+            {
+                _packedValsPerPixel = 8 / _imageInfo.BitDepth;
+                _packedShift = _imageInfo.BitDepth;
+                if (_imageInfo.BitDepth == 1)
+                    _packedMask = 0x80;
+                else if (_imageInfo.BitDepth == 2)
+                    _packedMask = 0xc0;
                 else
-                    packedMask = 0xf0;
-            } else {
-                packedMask = packedShift = packedValsPerPixel = 1;// dont care
+                    _packedMask = 0xf0;
             }
-            setPass(1);
-            setRow(0);
+            else
+            {
+                _packedMask = _packedShift = _packedValsPerPixel = 1; // Don't care.
+            }
+
+            SetPass(1);
+            SetRow(0);
         }
 
 
-        /** this refers to the row currRowSubimg */
-        internal void setRow(int n) {
-            currRowSubimg = n;
-            currRowReal = n * dY + oY;
-            if (currRowReal < 0 || currRowReal >= imi.Rows)
-                throw new PngjExceptionInternal("bad row - this should not happen");
+        // This refers to the row currentRowSubImage.
+        internal void SetRow(int n)
+        {
+            _currentRowSubImage = n;
+            _currentRowReal = n * _dY + _oY;
+            if (_currentRowReal < 0 || _currentRowReal >= _imageInfo.Rows)
+                throw new Exception("Bad row, this should not happen.");
         }
 
-        internal void setPass(int p) {
-            if (this.pass == p)
+        internal void SetPass(int pass)
+        {
+            if (_pass == pass)
                 return;
-            pass = p;
-            switch (pass) {
+
+            _pass = pass;
+            switch (_pass)
+            {
                 case 1:
-                    dY = dX = 8;
-                    oX = oY = 0;
+                    _dY = _dX = 8;
+                    _oX = _oY = 0;
                     break;
                 case 2:
-                    dY = dX = 8;
-                    oX = 4;
-                    oY = 0;
+                    _dY = _dX = 8;
+                    _oX = 4;
+                    _oY = 0;
                     break;
                 case 3:
-                    dX = 4;
-                    dY = 8;
-                    oX = 0;
-                    oY = 4;
+                    _dX = 4;
+                    _dY = 8;
+                    _oX = 0;
+                    _oY = 4;
                     break;
                 case 4:
-                    dX = dY = 4;
-                    oX = 2;
-                    oY = 0;
+                    _dX = _dY = 4;
+                    _oX = 2;
+                    _oY = 0;
                     break;
                 case 5:
-                    dX = 2;
-                    dY = 4;
-                    oX = 0;
-                    oY = 2;
+                    _dX = 2;
+                    _dY = 4;
+                    _oX = 0;
+                    _oY = 2;
                     break;
                 case 6:
-                    dX = dY = 2;
-                    oX = 1;
-                    oY = 0;
+                    _dX = _dY = 2;
+                    _oX = 1;
+                    _oY = 0;
                     break;
                 case 7:
-                    dX = 1;
-                    dY = 2;
-                    oX = 0;
-                    oY = 1;
+                    _dX = 1;
+                    _dY = 2;
+                    _oX = 0;
+                    _oY = 1;
                     break;
                 default:
-                    throw new PngjExceptionInternal("bad interlace pass" + pass);
+                    throw new Exception($"Bad interlace pass: {_pass}");
             }
-            rows = (imi.Rows - oY) / dY + 1;
-            if ((rows - 1) * dY + oY >= imi.Rows)
-                rows--; // can be 0
-            cols = (imi.Cols - oX) / dX + 1;
-            if ((cols - 1) * dX + oX >= imi.Cols)
-                cols--; // can be 0
-            if (cols == 0)
-                rows = 0; // really...
-            dXsamples = dX * imi.Channels;
-            oXsamples = oX * imi.Channels;
+
+            _rows = (_imageInfo.Rows - _oY) / _dY + 1;
+            if ((_rows - 1) * _dY + _oY >= _imageInfo.Rows)
+                _rows--; // can be 0
+
+            _columns = (_imageInfo.Columns - _oX) / _dX + 1;
+            if ((_columns - 1) * _dX + _oX >= _imageInfo.Columns)
+                _columns--; // can be 0
+
+            if (_columns == 0)
+                _rows = 0; // really...
+
+            _dXsamples = _dX * _imageInfo.Channels;
+            _oXsamples = _oX * _imageInfo.Channels;
         }
 
         // notice that this is a "partial" deinterlace, it will be called several times for the same row!
-        internal void deinterlaceInt(int[] src, int[] dst, bool readInPackedFormat) {
-            if (!(imi.Packed && readInPackedFormat))
-                for (int i = 0, j = oXsamples; i < cols * imi.Channels; i += imi.Channels, j += dXsamples)
-                    for (int k = 0; k < imi.Channels; k++)
+        internal void DeinterlaceInt(int[] src, int[] dst, bool readInPackedFormat)
+        {
+            if (!(_imageInfo.Packed && readInPackedFormat))
+                for (int i = 0, j = _oXsamples; i < _columns * _imageInfo.Channels; i += _imageInfo.Channels, j += _dXsamples)
+                    for (int k = 0; k < _imageInfo.Channels; k++)
                         dst[j + k] = src[i + k];
             else
-                deinterlaceIntPacked(src, dst);
+                DeinterlaceIntPacked(src, dst);
         }
 
         // interlaced+packed = monster; this is very clumsy!
-        private void deinterlaceIntPacked(int[] src, int[] dst) {
-            int spos, smod, smask; // source byte position, bits to shift to left (01,2,3,4
-            int tpos, tmod, p, d;
-            spos = 0;
-            smask = packedMask;
+        private void DeinterlaceIntPacked(int[] src, int[] dst)
+        {
+            // Source byte position, bits to shift to left (0,1,2,3,4)
+            int spos;
+            int smod;
+            int smask;
+
+            int tpos;
+            int tmod;
+            int p;
+            int d;
+
+            // Can this really work?
+            smask = _packedMask;
             smod = -1;
-            // can this really work?
-            for (int i = 0, j = oX; i < cols; i++, j += dX) {
-                spos = i / packedValsPerPixel;
+            for (int i = 0, j = _oX; i < _columns; i++, j += _dX)
+            {
+                spos = i / _packedValsPerPixel;
                 smod += 1;
-                if (smod >= packedValsPerPixel)
+                if (smod >= _packedValsPerPixel)
                     smod = 0;
-                smask >>= packedShift; // the source mask cycles
+
+                smask >>= _packedShift; // The source mask cycles.
                 if (smod == 0)
-                    smask = packedMask;
-                tpos = j / packedValsPerPixel;
-                tmod = j % packedValsPerPixel;
+                    smask = _packedMask;
+
+                tpos = j / _packedValsPerPixel;
+                tmod = j % _packedValsPerPixel;
                 p = src[spos] & smask;
                 d = tmod - smod;
                 if (d > 0)
-                    p >>= (d * packedShift);
+                    p >>= d * _packedShift;
                 else if (d < 0)
-                    p <<= ((-d) * packedShift);
+                    p <<= (-d) * _packedShift;
+
                 dst[tpos] |= p;
             }
         }
 
-        // yes, duplication of code is evil, normally
-        internal void deinterlaceByte(byte[] src, byte[] dst, bool readInPackedFormat) {
-            if (!(imi.Packed && readInPackedFormat))
-                for (int i = 0, j = oXsamples; i < cols * imi.Channels; i += imi.Channels, j += dXsamples)
-                    for (int k = 0; k < imi.Channels; k++)
+        // Yes, duplication of code is evil, normally.
+        internal void DeinterlaceByte(byte[] src, byte[] dst, bool readInPackedFormat)
+        {
+            if (!(_imageInfo.Packed && readInPackedFormat))
+            {
+                for (int i = 0, j = _oXsamples; i < _columns * _imageInfo.Channels; i += _imageInfo.Channels, j += _dXsamples)
+                {
+                    for (int k = 0; k < _imageInfo.Channels; k++)
+                    {
                         dst[j + k] = src[i + k];
+                    }
+                }
+            }
             else
-                deinterlacePackedByte(src, dst);
+            {
+                DeinterlacePackedByte(src, dst);
+            }
         }
 
-        private void deinterlacePackedByte(byte[] src, byte[] dst) {
-            int spos, smod, smask; // source byte position, bits to shift to left (01,2,3,4
-            int tpos, tmod, p, d;
-            // what the heck are you reading here? I told you would not enjoy this. Try Dostoyevsky or Simone Weil instead
-            spos = 0;
-            smask = packedMask;
+        private void DeinterlacePackedByte(byte[] src, byte[] dst)
+        {
+            // Source byte position, bits to shift to left (0,1,2,3,4)
+            int spos;
+            int smod;
+            int smask;
+
+            int tpos;
+            int tmod;
+            int p;
+            int d;
+
+            // What the heck are you reading here? I told you would not enjoy this. Try Dostoyevsky or Simone Weil instead
+            smask = _packedMask;
             smod = -1;
+
             // Arrays.fill(dst, 0);
-            for (int i = 0, j = oX; i < cols; i++, j += dX) {
-                spos = i / packedValsPerPixel;
+            for (int i = 0, j = _oX; i < _columns; i++, j += _dX)
+            {
+                spos = i / _packedValsPerPixel;
                 smod += 1;
-                if (smod >= packedValsPerPixel)
+                if (smod >= _packedValsPerPixel)
                     smod = 0;
-                smask >>= packedShift; // the source mask cycles
+
+                smask >>= _packedShift; // The source mask cycles
                 if (smod == 0)
-                    smask = packedMask;
-                tpos = j / packedValsPerPixel;
-                tmod = j % packedValsPerPixel;
+                    smask = _packedMask;
+
+                tpos = j / _packedValsPerPixel;
+                tmod = j % _packedValsPerPixel;
                 p = src[spos] & smask;
                 d = tmod - smod;
+
                 if (d > 0)
-                    p >>= (d * packedShift);
+                    p >>= d * _packedShift;
                 else if (d < 0)
-                    p <<= ((-d) * packedShift);
+                    p <<= (-d) * _packedShift;
+
                 dst[tpos] |= (byte)p;
             }
         }
 
-        /**
-         * Is current row the last row for the lass pass??
-         */
-        internal bool isAtLastRow() {
-            return pass == 7 && currRowSubimg == rows - 1;
-        }
+        /// <summary>
+        /// Whether or not the current row is the last row for the last pass.
+        /// </summary>
+        internal bool AtLastRow()
+            => _pass == 7 && _currentRowSubImage == (_rows - 1);
 
-        /**
-         * current row number inside the "sub image"
-         */
-        internal int getCurrRowSubimg() {
-            return currRowSubimg;
-        }
+        /// <summary>
+        /// Current row number inside the "sub image"
+        /// </summary>
+        internal int GetCurrentRowSubImage()
+            => _currentRowSubImage;
 
-        /**
-         * current row number inside the "real image"
-         */
-        internal int getCurrRowReal() {
-            return currRowReal;
-        }
+        /// <summary>
+        /// Current row number inside the "real image".
+        /// </summary>
+        internal int GetCurrentRowReal()
+            => _currentRowReal;
 
-        /**
-         * current pass number (1-7)
-         */
-        internal int getPass() {
-            return pass;
-        }
+        /// <summary>
+        /// How many rows has the current pass?
+        /// </summary>
+        internal int GetRows()
+            => _rows;
 
-        /**
-         * How many rows has the current pass?
-         **/
-        internal int getRows() {
-            return rows;
-        }
-
-        /**
-         * How many columns (pixels) are there in the current row
-         */
-        internal int getCols() {
-            return cols;
-        }
-
-        internal int getPixelsToRead() {
-            return getCols();
-        }
-
-        internal int[][] getImageInt() {
-            return imageInt;
-        }
-
-        internal void setImageInt(int[][] imageInt) {
-            this.imageInt = imageInt;
-        }
-
-        internal byte[][] getImageByte() {
-            return imageByte;
-        }
-
-        internal void setImageByte(byte[][] imageByte) {
-            this.imageByte = imageByte;
-        }
-
+        /// <summary>
+        /// Get the number of columns (pixels) there are in the current row.
+        /// </summary>
+        internal int GetColumns()
+            => _columns;
     }
 }

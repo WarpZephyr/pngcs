@@ -1,65 +1,86 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 
-namespace Hjg.Pngcs.Chunks {
-
-
-    /// <summary>Image Metadata, wrapper over a ChunksList</summary>
+namespace Hjg.Pngcs.Chunks
+{
+    /// <summary>
+    /// Image metadata, a wrapper over a <see cref="ChunksList"/>.
+    /// </summary>
     /// <remarks>
-    /// Additional image info, apart from the ImageInfo and the pixels themselves. 
-    /// Includes Palette and ancillary chunks.
+    /// Additional image info, apart from the ImageInfo and the pixels themselves.<br/>
+    /// Includes Palette and ancillary chunks.<br/>
     /// This class provides a wrapper over the collection of chunks of a image (read or to write) and provides some high
-    /// level methods to access them
+    /// level methods to access them.
     /// </remarks>
-    public class PngMetadata {
-        private readonly ChunksList chunkList;
-        private readonly bool ReadOnly; // readonly
+    public class PngMetadata
+    {
+        /// <summary>
+        /// The underlying <see cref="ChunksList"/>.
+        /// </summary>
+        private readonly ChunksList _chunkList;
 
-        internal PngMetadata(ChunksList chunks) {
-            this.chunkList = chunks;
-            if (chunks is ChunksListForWrite) {
-                this.ReadOnly = false;
-            } else {
-                this.ReadOnly = true;
+        /// <summary>
+        /// Whether or not the metadata is readonly.
+        /// </summary>
+        public readonly bool ReadOnly;
+
+        internal PngMetadata(ChunksList chunks)
+        {
+            _chunkList = chunks;
+            if (chunks is ChunksListForWrite)
+            {
+                ReadOnly = false;
+            }
+            else
+            {
+                ReadOnly = true;
             }
         }
 
-        /// <summary>Queues the chunk at the writer</summary>
-        /// <param name="chunk">Chunk, ready for write</param>
-        /// <param name="lazyOverwrite">Ovewrite lazily equivalent chunks</param>
-        /// <remarks>Warning: the overwriting applies to equivalent chunks, see <c>ChunkPredicateEquiv</c>
-        /// and will only make sense for queued (not yet writen) chunks
+        #region Queue
+
+        /// <summary>
+        /// Queues the chunk at the writer.
+        /// </summary>
+        /// <param name="chunk">The ready-to-write chunk.</param>
+        /// <param name="lazyOverwrite">Whether or not to overwrite lazily equivalent chunks.</param>
+        /// <remarks>
+        /// Warning: the overwriting applies to equivalent chunks, see <see cref="ChunkPredicateEquiv"/>,
+        /// and will only make sense for queued (not yet writen) chunks.
         /// </remarks>
-        public void QueueChunk(PngChunk chunk, bool lazyOverwrite) {
-            ChunksListForWrite cl = getChunkListW();
+        public void QueueChunk(PngChunk chunk, bool lazyOverwrite)
+        {
+            ChunksListForWrite cl = (ChunksListForWrite)_chunkList;
             if (ReadOnly)
-                throw new PngjException("cannot set chunk : readonly metadata");
-            if (lazyOverwrite) {
+                throw new InvalidOperationException("Cannot queue chunk, metadata is readonly.");
+
+            if (lazyOverwrite)
+            {
                 ChunkHelper.TrimList(cl.GetQueuedChunks(), new ChunkPredicateEquiv(chunk));
             }
             cl.Queue(chunk);
         }
 
-        /// <summary>Queues the chunk at the writer</summary>
-        /// <param name="chunk">Chunk, ready for write</param>
-        public void QueueChunk(PngChunk chunk) {
-            QueueChunk(chunk, true);
-        }
+        /// <summary>
+        /// Queues the chunk at the writer.
+        /// </summary>
+        /// <param name="chunk">The ready-to-write chunk.</param>
+        public void QueueChunk(PngChunk chunk)
+            => QueueChunk(chunk, true);
 
-        private ChunksListForWrite getChunkListW() {
-            return (ChunksListForWrite)chunkList;
-        }
+        #endregion
 
-        // ///// high level utility methods follow ////////////
+        #region Utility Methods
 
-        // //////////// DPI
+        #region PHYS
+
         /// <summary>
         /// Returns physical resolution, in DPI, in both coordinates
         /// </summary>
         /// <returns>[dpix,dpiy], -1 if not set or unknown dimensions</returns>
-        public double[] GetDpi() {
-            PngChunk c = chunkList.GetById1(ChunkHelper.pHYs, true);
+        public double[] GetDpi()
+        {
+            PngChunk c = _chunkList.GetById(ChunkHelper.pHYs, true);
             if (c == null)
                 return new double[] { -1, -1 };
             else
@@ -67,13 +88,14 @@ namespace Hjg.Pngcs.Chunks {
         }
 
         /// <summary>
-        /// Sets physical resolution, in DPI
+        /// Sets physical resolution, in DPI.
         /// </summary>
-        /// <remarks>This is a utility method that creates and enqueues a PHYS chunk</remarks>
-        /// <param name="dpix">Resolution in x</param>
-        /// <param name="dpiy">Resolution in y</param>
-        public void SetDpi(double dpix, double dpiy) {
-            PngChunkPHYS c = new PngChunkPHYS(chunkList.imageInfo);
+        /// <remarks>This is a utility method that creates and enqueues a PHYS chunk.</remarks>
+        /// <param name="dpix">Resolution in x.</param>
+        /// <param name="dpiy">Resolution in y.</param>
+        public void SetDpi(double dpix, double dpiy)
+        {
+            PngChunkPHYS c = new PngChunkPHYS(_chunkList._imageInfo);
             c.SetAsDpi2(dpix, dpiy);
             QueueChunk(c);
         }
@@ -83,17 +105,21 @@ namespace Hjg.Pngcs.Chunks {
         /// </summary>
         /// <remarks>This is a utility method that creates and enqueues a PHYS chunk</remarks>
         /// <param name="dpi">Resolution in dpi</param>
-        public void SetDpi(double dpi) {
-            SetDpi(dpi, dpi);
-        }
+        public void SetDpi(double dpi)
+            => SetDpi(dpi, dpi);
+
+        #endregion
+
+        #region Time
 
         /// <summary>
         /// Creates a TIME chunk,  <c>nsecs</c> in the past from now.
         /// </summary>
         /// <param name="nsecs">Seconds in the past. If negative, it's a future time</param>
         /// <returns>The created and queued chunk</returns>
-        public PngChunkTIME SetTimeNow(int nsecs) {
-            PngChunkTIME c = new PngChunkTIME(chunkList.imageInfo);
+        public PngChunkTIME SetTimeNow(int nsecs)
+        {
+            PngChunkTIME c = new PngChunkTIME(_chunkList._imageInfo);
             c.SetNow(nsecs);
             QueueChunk(c);
             return c;
@@ -103,7 +129,8 @@ namespace Hjg.Pngcs.Chunks {
         ///Creates a TIME chunk with current time.
         /// </summary>
         /// <returns>The created and queued chunk</returns>
-        public PngChunkTIME SetTimeNow() {
+        public PngChunkTIME SetTimeNow()
+        {
             return SetTimeNow(0);
         }
 
@@ -117,8 +144,9 @@ namespace Hjg.Pngcs.Chunks {
         /// <param name="min">Minute (0-59)</param>
         /// <param name="sec">Seconds (0-59)</param>
         /// <returns>The created and queued chunk</returns>
-        public PngChunkTIME SetTimeYMDHMS(int year, int mon, int day, int hour, int min, int sec) {
-            PngChunkTIME c = new PngChunkTIME(chunkList.imageInfo);
+        public PngChunkTIME SetTimeYMDHMS(int year, int mon, int day, int hour, int min, int sec)
+        {
+            PngChunkTIME c = new PngChunkTIME(_chunkList._imageInfo);
             c.SetYMDHMS(year, mon, day, hour, min, sec);
             QueueChunk(c, true);
             return c;
@@ -128,20 +156,22 @@ namespace Hjg.Pngcs.Chunks {
         /// Gets image timestamp, TIME chunk
         /// </summary>
         /// <returns>TIME chunk, null if not present</returns>
-        public PngChunkTIME GetTime() {
-            return (PngChunkTIME)chunkList.GetById1(ChunkHelper.tIME);
-        }
+        public PngChunkTIME GetTime()
+            => (PngChunkTIME)_chunkList.GetById(ChunkHelper.tIME);
 
         /// <summary>
         /// Gets image timestamp, TIME chunk, as a String
         /// </summary>
         /// <returns>Formated TIME, empty string if not present</returns>
-        public String GetTimeAsString() {
+        public string GetTimeAsString()
+        {
             PngChunkTIME c = GetTime();
             return c == null ? "" : c.GetAsString();
         }
 
-        // //////////// TEXT
+        #endregion
+
+        #region Text
 
         /// <summary>
         /// Creates a text chunk and enqueues it
@@ -151,21 +181,29 @@ namespace Hjg.Pngcs.Chunks {
         /// <param name="useLatin1">Flag. If false, will use UTF-8 (iTXt)</param>
         /// <param name="compress">Flag. Uses zTXt chunk.</param>
         /// <returns>The created and enqueued chunk</returns>
-        public PngChunkTextVar SetText(String key, String val, bool useLatin1, bool compress) {
+        public PngChunkTextVar SetText(string key, string val, bool useLatin1, bool compress)
+        {
             if (compress && !useLatin1)
-                throw new PngjException("cannot compress non latin text");
+                throw new ArgumentException("Cannot compress non-latin text.");
+
             PngChunkTextVar c;
-            if (useLatin1) {
-                if (compress) {
-                    c = new PngChunkZTXT(chunkList.imageInfo);
-                } else {
-                    c = new PngChunkTEXT(chunkList.imageInfo);
+            if (useLatin1)
+            {
+                if (compress)
+                {
+                    c = new PngChunkZTXT(_chunkList._imageInfo);
                 }
-            } else {
-                c = new PngChunkITXT(chunkList.imageInfo);
-                ((PngChunkITXT)c).SetLangtag(key); // we use the same orig tag (this is not quite right)
+                else
+                {
+                    c = new PngChunkTEXT(_chunkList._imageInfo);
+                }
             }
-            c.SetKeyVal(key, val);
+            else
+            {
+                c = new PngChunkITXT(_chunkList._imageInfo);
+                ((PngChunkITXT)c).LangTag = key; // we use the same orig tag (this is not quite right)
+            }
+            c.SetKeyValue(key, val);
             QueueChunk(c, true);
             return c;
         }
@@ -176,7 +214,8 @@ namespace Hjg.Pngcs.Chunks {
         /// <param name="key">Key</param>
         /// <param name="val">Text</param>
         /// <returns>The created and enqueued chunk</returns>
-        public PngChunkTextVar SetText(String key, String val) {
+        public PngChunkTextVar SetText(string key, string val)
+        {
             return SetText(key, val, false, false);
         }
 
@@ -186,13 +225,14 @@ namespace Hjg.Pngcs.Chunks {
         /// <param name="key">Key</param>
         /// <returns>Empty list if nothing found</returns>
         /// <remarks>Can mix tEXt zTXt and iTXt chunks</remarks>
-        public List<PngChunkTextVar> GetTxtsForKey(String key) {
+        public List<PngChunkTextVar> GetTxtsForKey(string key)
+        {
             List<PngChunkTextVar> li = new List<PngChunkTextVar>();
-            foreach (PngChunk c in chunkList.GetById(ChunkHelper.tEXt, key))
+            foreach (PngChunk c in _chunkList.GetListById(ChunkHelper.tEXt, key))
                 li.Add((PngChunkTextVar)c);
-            foreach (PngChunk c in chunkList.GetById(ChunkHelper.zTXt, key))
+            foreach (PngChunk c in _chunkList.GetListById(ChunkHelper.zTXt, key))
                 li.Add((PngChunkTextVar)c);
-            foreach (PngChunk c in chunkList.GetById(ChunkHelper.iTXt, key))
+            foreach (PngChunk c in _chunkList.GetListById(ChunkHelper.iTXt, key))
                 li.Add((PngChunkTextVar)c);
             return li;
         }
@@ -203,42 +243,59 @@ namespace Hjg.Pngcs.Chunks {
         /// <param name="key">Key</param>
         /// <returns>Concatenated (with newlines) if several found, empty string if none</returns>
         /// <remarks>You'd perhaps prefer GetTxtsForKey</remarks>
-        public String GetTxtForKey(String key) {
-            String t = "";
+        public string GetTxtForKey(string key)
+        {
+            string t = "";
             List<PngChunkTextVar> li = GetTxtsForKey(key);
             if (li.Count == 0)
                 return t;
             foreach (PngChunkTextVar c in li)
-                t = t + c.GetVal() + "\n";
+                t = t + c.GetValue() + "\n";
             return t.Trim();
         }
 
-        public PngChunkPLTE GetPLTE() {
-            return (PngChunkPLTE)chunkList.GetById1(PngChunkPLTE.ID);
-        }
+        #endregion
 
-        public PngChunkPLTE CreatePLTEChunk() {
-            PngChunkPLTE plte = new PngChunkPLTE(chunkList.imageInfo);
+        #region PLTE
+
+        public PngChunkPLTE GetPLTE()
+            => (PngChunkPLTE)_chunkList.GetById(PngChunkPLTE.ID);
+
+        /// <summary>
+        /// Creates a new empty PLTE chunk, queues it for write and return it to the caller, who should fill its entries.
+        /// </summary>
+        /// <returns>A new <see cref="PngChunkPLTE"/>.</returns>
+        public PngChunkPLTE CreatePLTE()
+        {
+            PngChunkPLTE plte = new PngChunkPLTE(_chunkList._imageInfo);
             QueueChunk(plte);
             return plte;
         }
 
-        /**
-         * Returns the TRNS chunk, if present
-         * 
-         * @return null if not present
-         */
-        public PngChunkTRNS GetTRNS() {
-            return (PngChunkTRNS)chunkList.GetById1(PngChunkTRNS.ID);
-        }
+        #endregion
 
-        /**
-         * Creates a new empty TRNS chunk, queues it for write and return it to the caller, who should fill its entries
-         */
-        public PngChunkTRNS CreateTRNSChunk() {
-            PngChunkTRNS trns = new PngChunkTRNS(chunkList.imageInfo);
+        #region TRNS
+
+        /// <summary>
+        /// Returns the TRNS chunk or null if not present.
+        /// </summary>
+        /// <returns>A <see cref="PngChunkTRNS"/>.</returns>
+        public PngChunkTRNS GetTRNS()
+            => (PngChunkTRNS)_chunkList.GetById(PngChunkTRNS.ID);
+
+        /// <summary>
+        /// Creates a new empty TRNS chunk, queues it for write and return it to the caller, who should fill its entries.
+        /// </summary>
+        /// <returns>A new <see cref="PngChunkTRNS"/>.</returns>
+        public PngChunkTRNS CreateTRNS()
+        {
+            PngChunkTRNS trns = new PngChunkTRNS(_chunkList._imageInfo);
             QueueChunk(trns);
             return trns;
         }
+
+        #endregion
+
+        #endregion
     }
 }

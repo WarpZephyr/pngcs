@@ -1,113 +1,120 @@
-namespace Hjg.Pngcs.Chunks {
+using System;
+using System.IO;
+using Hjg.Pngcs.Zlib;
 
-    using Hjg.Pngcs;
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.ComponentModel;
-    using System.IO;
-    using System.Runtime.CompilerServices;
-    using Hjg.Pngcs.Zlib;
-    
+namespace Hjg.Pngcs.Chunks
+{
     /// <summary>
-    /// Wraps the raw chunk data
+    /// Wraps raw chunk data.
     /// </summary>
     /// <remarks>
-    /// Short lived object, to be created while
-    /// serialing/deserializing 
-    /// 
-    /// Do not reuse it for different chunks
-    /// 
-    /// See http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
+    /// Short lived object, to be created while serialing/deserializing.<br/>
+    /// Do not reuse it for different chunks.<br/>
+    /// http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
     ///</remarks>
-    public class ChunkRaw {
+    public class ChunkRaw
+    {
         /// <summary>
-        /// The length counts only the data field, not itself, the chunk type code, or the CRC. Zero is a valid length.
+        /// The length counts only the data field, not itself, the chunk type code, or the CRC.<br/>
+        /// Zero is a valid length.<br/>
+        /// <br/>
         /// Although encoders and decoders should treat the length as unsigned, its value must not exceed 2^31-1 bytes.
         /// </summary>
         public readonly int Length;
+
         /// <summary>
         /// Chunk Id, as array of 4 bytes
         /// </summary>
         public readonly byte[] IdBytes;
+
         /// <summary>
         /// Raw data, crc not included
         /// </summary>
         public byte[] Data;
-        private int crcval;
 
         /// <summary>
-        /// Creates an empty raw chunk
+        /// The CRC value of the chunk.
         /// </summary>
-        /// <param name="length"></param>
-        /// <param name="idbytes"></param>
-        /// <param name="alloc">pre allocate the data buffer?</param>
-        internal ChunkRaw(int length, byte[] idbytes, bool alloc) {
-            this.IdBytes = new byte[4];
-            this.Data = null;
-            this.crcval = 0;
-            this.Length = length;
-            System.Array.Copy((Array)(idbytes), 0, (Array)(this.IdBytes), 0, 4);
-            if (alloc)
-                AllocData();
+        private int crcValue;
+
+        /// <summary>
+        /// Creates an empty raw chunk.
+        /// </summary>
+        /// <param name="length">The length of data within the chunk.</param>
+        /// <param name="idbytes">The ID of the chunk.</param>
+        /// <param name="alloc">Whether or not to pre-allocate the data buffer.</param>
+        internal ChunkRaw(int length, byte[] idbytes, bool alloc)
+        {
+            IdBytes = new byte[4];
+            Data = null;
+            crcValue = 0;
+            Length = length;
+            Array.Copy(idbytes, 0, IdBytes, 0, 4);
+            if (alloc && (Data == null || Data.Length < Length))
+                Data = new byte[Length];
         }
 
         /// <summary>
-        /// Called after setting data, before writing to os
+        /// Called after setting data, before writing to output.
         /// </summary>
-        private int ComputeCrc() {
-            CRC32 crcengine = Hjg.Pngcs.PngHelperInternal.GetCRC();
+        private int ComputeCrc()
+        {
+            CRC32 crcengine = PngHelperInternal.GetCRC();
             crcengine.Reset();
             crcengine.Update(IdBytes, 0, 4);
             if (Length > 0)
-                crcengine.Update(Data, 0, Length); //
+                crcengine.Update(Data, 0, Length);
             return (int)crcengine.GetValue();
         }
 
-
-        internal void WriteChunk(Stream os) {
+        /// <summary>
+        /// Writes this chunk to an output <see cref="Stream"/>.
+        /// </summary>
+        /// <param name="output">The stream to write to.</param>
+        /// <exception cref="InvalidDataException">The chunk ID was invalid.</exception>
+        internal void WriteChunk(Stream output)
+        {
             if (IdBytes.Length != 4)
-                throw new PngjOutputException("bad chunkid [" + Hjg.Pngcs.Chunks.ChunkHelper.ToString(IdBytes) + "]");
-            crcval = ComputeCrc();
-            Hjg.Pngcs.PngHelperInternal.WriteInt4(os, Length);
-            Hjg.Pngcs.PngHelperInternal.WriteBytes(os, IdBytes);
+                throw new InvalidDataException($"Bad chunk ID: {ChunkHelper.ToString(IdBytes)}");
+
+            crcValue = ComputeCrc();
+            PngHelperInternal.WriteInt32(output, Length);
+            PngHelperInternal.WriteBytes(output, IdBytes);
             if (Length > 0)
-                Hjg.Pngcs.PngHelperInternal.WriteBytes(os, Data, 0, Length);
-            //Console.WriteLine("writing chunk " + this.ToString() + "crc=" + crcval);
-            Hjg.Pngcs.PngHelperInternal.WriteInt4(os, crcval);
+                PngHelperInternal.WriteBytes(output, Data, 0, Length);
+
+            PngHelperInternal.WriteInt32(output, crcValue);
         }
 
         /// <summary>
         /// Position before: just after chunk id. positon after: after crc Data should
         /// be already allocated. Checks CRC Return number of byte read.
         /// </summary>
-        ///
-        internal int ReadChunkData(Stream stream, bool checkCrc) {
-            Hjg.Pngcs.PngHelperInternal.ReadBytes(stream, Data, 0, Length);
-            crcval = Hjg.Pngcs.PngHelperInternal.ReadInt4(stream);
-            if (checkCrc) {
+        internal int ReadChunkData(Stream stream, bool checkCrc)
+        {
+            PngHelperInternal.ReadBytes(stream, Data, 0, Length);
+            crcValue = PngHelperInternal.ReadInt32(stream);
+            if (checkCrc)
+            {
                 int crc = ComputeCrc();
-                if (crc != crcval)
-                    throw new PngjBadCrcException("crc invalid for chunk " + ToString() + " calc="
-                            + crc + " read=" + crcval);
+                if (crc != crcValue)
+                    throw new InvalidDataException($"Invalid CRC for chunk {this} Expected: {crc}, Read: {crcValue}");
             }
             return Length + 4;
         }
 
-        internal MemoryStream GetAsByteStream() { // only the data
-            return new MemoryStream(Data);
-        }
-
-        private void AllocData() {
-            if (Data == null || Data.Length < Length)
-                Data = new byte[Length];
-        }
         /// <summary>
-        /// Just id and length
+        /// Gets the data as a new <see cref="MemoryStream"/>.
         /// </summary>
-        /// <returns></returns>
-        public override String ToString() {
-            return "chunkid=" + Hjg.Pngcs.Chunks.ChunkHelper.ToString(IdBytes) + " len=" + Length;
-        }
+        /// <returns>A new <see cref="MemoryStream"/>.</returns>
+        internal MemoryStream ToMemoryStream()
+            => new MemoryStream(Data);
+
+        /// <summary>
+        /// The ID and length of this chunk.
+        /// </summary>
+        /// <returns>The ID and length of this chunk</returns>
+        public override string ToString()
+            => $"ChunkID={ChunkHelper.ToString(IdBytes)}, Length={Length}";
     }
 }

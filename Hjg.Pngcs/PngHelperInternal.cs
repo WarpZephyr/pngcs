@@ -1,189 +1,145 @@
-namespace Hjg.Pngcs {
+using System;
+using System.IO;
+using System.Text;
+using Hjg.Pngcs.Zlib;
 
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.IO;
-    using System.Text;
-    using Hjg.Pngcs.Zlib;
-
+namespace Hjg.Pngcs
+{
     /// <summary>
     /// Some utility static methods for internal use.
     /// </summary>
-    public class PngHelperInternal {
-
+    public class PngHelperInternal
+    {
         [ThreadStatic]
-        private static CRC32 crc32Engine = null;
-
-        /// <summary>
-        /// thread-singleton crc engine 
-        /// </summary>
-        ///
-        public static CRC32 GetCRC() {
-            if (crc32Engine == null) crc32Engine = new CRC32();
-            return crc32Engine;
-        }
+        private static CRC32 _crc32Engine = null;
 
         public static readonly byte[] PNG_ID_SIGNATURE = { 256 - 119, 80, 78, 71, 13, 10, 26, 10 }; // png magic
+        public static Encoding CharsetLatin1 = Encoding.GetEncoding("ISO-8859-1"); // charset
+        public static Encoding CharsetUTF8 = Encoding.GetEncoding("UTF-8"); // charset used for some chunks
 
-        public static Encoding charsetLatin1 = System.Text.Encoding.GetEncoding("ISO-8859-1"); // charset
-        public static Encoding charsetUtf8 = System.Text.Encoding.GetEncoding("UTF-8"); // charset used for some chunks
+        /// <summary>
+        /// Thread-singleton crc engine.
+        /// </summary>
+        public static CRC32 GetCRC()
+        {
+            if (_crc32Engine == null)
+                _crc32Engine = new CRC32();
 
-        public static bool DEBUG = false;
-
-        public static int DoubleToInt100000(double d) {
-            return (int)(d * 100000.0 + 0.5);
+            return _crc32Engine;
         }
 
-        public static double IntToDouble100000(int i) {
-            return i / 100000.0;
-        }
+        public static int DoubleToInt100000(double d)
+            => (int)(d * 100000.0 + 0.5);
 
-        public static void WriteInt2(Stream os, int n) {
-            byte[] temp = { (byte)((n >> 8) & 0xff), (byte)(n & 0xff) };
-            WriteBytes(os, temp);
+        public static double IntToDouble100000(int i)
+            => i / 100000.0;
+
+        public static void WriteInt16(Stream output, int value)
+        {
+            output.WriteByte((byte)((value >> 8) & 0xff));
+            output.WriteByte((byte)(value & 0xff));
         }
 
         /// <summary>
-        /// -1 si eof
+        /// Reads a 4-byte integer.
         /// </summary>
-        ///
-        public static int ReadInt2(Stream mask0) {
-            try {
-                int b1 = mask0.ReadByte();
-                int b2 = mask0.ReadByte();
-                if (b1 == -1 || b2 == -1)
-                    return -1;
-                return (b1 << 8) + b2;
-            } catch (IOException e) {
-                throw new PngjInputException("error reading readInt2", e);
-            }
+        public static int ReadInt32(Stream input)
+        {
+            int b1 = input.ReadByte();
+            int b2 = input.ReadByte();
+            int b3 = input.ReadByte();
+            int b4 = input.ReadByte();
+            if (b1 == -1 || b2 == -1 || b3 == -1 || b4 == -1)
+                return -1;
+
+            return (b1 << 24) + (b2 << 16) + (b3 << 8) + b4;
+        }
+
+        public static int ReadByte(byte[] value, int offset)
+            => value[offset];
+
+        public static int ReadInt16(byte[] value, int offset)
+            => ((value[offset] & 0xff) << 16) | (value[offset + 1] & 0xff);
+
+        public static int ReadInt32(byte[] value, int offset)
+            => ((value[offset] & 0xff) << 24) | ((value[offset + 1] & 0xff) << 16)
+            | ((value[offset + 2] & 0xff) << 8) | (value[offset + 3] & 0xff);
+
+        public static void WriteInt16(int value, byte[] b, int offset)
+        {
+            b[offset] = (byte)((value >> 8) & 0xff);
+            b[offset + 1] = (byte)(value & 0xff);
+        }
+
+        public static void WriteInt32(int value, byte[] b, int offset)
+        {
+            b[offset] = (byte)((value >> 24) & 0xff);
+            b[offset + 1] = (byte)((value >> 16) & 0xff);
+            b[offset + 2] = (byte)((value >> 8) & 0xff);
+            b[offset + 3] = (byte)(value & 0xff);
+        }
+
+        public static void WriteInt32(Stream output, int value)
+        {
+            output.WriteByte((byte)((value >> 24) & 0xff));
+            output.WriteByte((byte)((value >> 16) & 0xff));
+            output.WriteByte((byte)((value >> 8) & 0xff));
+            output.WriteByte((byte)(value & 0xff));
         }
 
         /// <summary>
-        /// -1 si eof
+        /// Guaranteed to read exactly length bytes or it will throw an error.
         /// </summary>
-        ///
-        public static int ReadInt4(Stream mask0) {
-            try {
-                int b1 = mask0.ReadByte();
-                int b2 = mask0.ReadByte();
-                int b3 = mask0.ReadByte();
-                int b4 = mask0.ReadByte();
-                if (b1 == -1 || b2 == -1 || b3 == -1 || b4 == -1)
-                    return -1;
-                return (b1 << 24) + (b2 << 16) + (b3 << 8) + b4;
-            } catch (IOException e) {
-                throw new PngjInputException("error reading readInt4", e);
-            }
-        }
-
-        public static int ReadInt1fromByte(byte[] b, int offset) {
-            return (b[offset] & 0xff);
-        }
-
-        public static int ReadInt2fromBytes(byte[] b, int offset) {
-            return ((b[offset] & 0xff) << 16) | ((b[offset + 1] & 0xff));
-        }
-
-        public static int ReadInt4fromBytes(byte[] b, int offset) {
-            return ((b[offset] & 0xff) << 24) | ((b[offset + 1] & 0xff) << 16)
-                    | ((b[offset + 2] & 0xff) << 8) | (b[offset + 3] & 0xff);
-        }
-
-        public static void WriteInt2tobytes(int n, byte[] b, int offset) {
-            b[offset] = (byte)((n >> 8) & 0xff);
-            b[offset + 1] = (byte)(n & 0xff);
-        }
-
-        public static void WriteInt4tobytes(int n, byte[] b, int offset) {
-            b[offset] = (byte)((n >> 24) & 0xff);
-            b[offset + 1] = (byte)((n >> 16) & 0xff);
-            b[offset + 2] = (byte)((n >> 8) & 0xff);
-            b[offset + 3] = (byte)(n & 0xff);
-        }
-
-        public static void WriteInt4(Stream os, int n) {
-            byte[] temp = new byte[4];
-            WriteInt4tobytes(n, temp, 0);
-            WriteBytes(os, temp);
-            //Console.WriteLine("writing int " + n + " b=" + (sbyte)temp[0] + "," + (sbyte)temp[1] + "," + (sbyte)temp[2] + "," + (sbyte)temp[3]);
-        }
-
-        /// <summary>
-        /// guaranteed to read exactly len bytes. throws error if it cant
-        /// </summary>
-        ///
-        public static void ReadBytes(Stream mask0, byte[] b, int offset, int len) {
-            if (len == 0)
+        public static void ReadBytes(Stream input, byte[] buffer, int offset, int length)
+        {
+            if (length == 0)
                 return;
-            try {
-                int read = 0;
-                while (read < len) {
-                    int n = mask0.Read(b, offset + read, len - read);
-                    if (n < 1)
-                        throw new Exception("error reading, " + n + " !=" + len);
-                    read += n;
-                }
-            } catch (IOException e) {
-                throw new PngjInputException("error reading", e);
+
+            int read = 0;
+            while (read < length)
+            {
+                int readCount = input.Read(buffer, offset + read, length - read);
+                if (readCount < 1)
+                    throw new IOException($"Error reading, Read: {readCount}, Expected: {length}");
+
+                read += readCount;
             }
         }
 
-        public static void SkipBytes(Stream ist, int len) {
-            byte[] buf = new byte[8192 * 4];
-            int read, remain = len;
-            try {
-                while (remain > 0) {
-                    read = ist.Read(buf, 0, remain > buf.Length ? buf.Length : remain);
-                    if (read < 0)
-                        throw new PngjInputException("error reading (skipping) : EOF");
-                    remain -= read;
-                }
-            } catch (IOException e) {
-                throw new PngjInputException("error reading (skipping)", e);
+        public static void SkipBytes(Stream input, int length)
+        {
+            byte[] buffer = new byte[8192 * 4];
+            int read = length;
+            int remain = length;
+
+            while (remain > 0)
+            {
+                read = input.Read(buffer, 0, remain > buffer.Length ? buffer.Length : remain);
+                if (read < 0)
+                    throw new EndOfStreamException($"End of stream error in: {nameof(SkipBytes)}");
+
+                remain -= read;
             }
         }
 
-        public static void WriteBytes(Stream os, byte[] b) {
-            try {
-                os.Write(b, 0, b.Length);
-            } catch (IOException e) {
-                throw new PngjOutputException(e);
-            }
-        }
+        public static void WriteBytes(Stream output, byte[] b)
+            => output.Write(b, 0, b.Length);
 
-        public static void WriteBytes(Stream os, byte[] b, int offset, int n) {
-            try {
-                os.Write(b, offset, n);
-            } catch (IOException e) {
-                throw new PngjOutputException(e);
-            }
-        }
+        public static void WriteBytes(Stream output, byte[] buffer, int offset, int count)
+            => output.Write(buffer, offset, count);
 
-        public static int ReadByte(Stream mask0) {
-            try {
-                return mask0.ReadByte();
-            } catch (IOException e) {
-                throw new PngjOutputException(e);
-            }
-        }
+        public static int ReadByte(Stream input)
+            => input.ReadByte();
 
-        public static void WriteByte(Stream os, byte b) {
-            try {
-                os.WriteByte((byte)b);
-            } catch (IOException e) {
-                throw new PngjOutputException(e);
-            }
-        }
+        public static void WriteByte(Stream output, byte value)
+            => output.WriteByte(value);
 
+        public static int UnfilterRowPaeth(int r, int a, int b, int c)
+            // a = left, b = above, c = upper left
+            => (r + FilterPaethPredictor(a, b, c)) & 0xFF;
 
-
-        public static int UnfilterRowPaeth(int r, int a, int b, int c) { // a = left, b = above, c = upper left
-            return (r + FilterPaethPredictor(a, b, c)) & 0xFF;
-        }
-
-        public static int FilterPaethPredictor(int a, int b, int c) {
+        public static int FilterPaethPredictor(int a, int b, int c)
+        {
             // from http://www.libpng.org/pub/png/spec/1.2/PNG-Filters.html
             // a = left, b = above, c = upper left
             int p = a + b - c;// ; initial estimate
@@ -199,21 +155,5 @@ namespace Hjg.Pngcs {
             else
                 return c;
         }
-
-
-        public static void Logdebug(String msg) {
-            if (DEBUG)
-                System.Console.Out.WriteLine(msg);
-        }
-
-
-   	public static void InitCrcForTests(PngReader pngr) {
-		pngr.InitCrctest();
-	}
-
-	public static long GetCrctestVal(PngReader pngr) {
-		return pngr.GetCrctestVal();
-	}
-
     }
 }

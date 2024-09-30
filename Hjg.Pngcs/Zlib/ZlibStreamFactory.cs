@@ -1,40 +1,36 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+﻿using System.IO;
 
-namespace Hjg.Pngcs.Zlib {
-
-
-    public class ZlibStreamFactory {        
-        public static AZlibInputStream createZlibInputStream(Stream st, bool leaveOpen) {
-#if NET45
-                return new ZlibInputStreamMs(st,leaveOpen);
-#endif
+namespace Hjg.Pngcs.Zlib
+{
+    public class ZlibStreamFactory
+    {
+        public static ZlibInputStream CreateZlibInputStream(Stream stream, bool leaveOpen)
+        {
 #if SHARPZIPLIB
-            return new ZlibInputStreamIs(st, leaveOpen);
+            return new ICSZlibInputStream(stream, leaveOpen);
 #endif
-        }
-
-        public static AZlibInputStream createZlibInputStream(Stream st) {
-            return createZlibInputStream(st, false);
-        }
-
-        public static AZlibOutputStream createZlibOutputStream(Stream st, int compressLevel, EDeflateCompressStrategy strat, bool leaveOpen) {
 #if NET45
-                return new ZlibOutputStreamMs( st, compressLevel,strat, leaveOpen);
+                return new MsZlibInputStream(stream, leaveOpen);
 #endif
+        }
+
+        public static ZlibInputStream CreateZlibInputStream(Stream stream)
+            => CreateZlibInputStream(stream, false);
+
+        public static ZlibOutputStream CreateZlibOutputStream(Stream stream, int compressLevel, DeflateCompressStrategy strat, bool leaveOpen)
+        {
 #if SHARPZIPLIB
-            return new ZlibOutputStreamIs(st, compressLevel, strat, leaveOpen);
+            return new ICSZlibOutputStream(stream, compressLevel, strat, leaveOpen);
+#endif
+#if NET45
+                return new MsZlibOutputStream(stream, compressLevel, strategy, leaveOpen);
 #endif
         }
 
-        public static AZlibOutputStream createZlibOutputStream(Stream st) {
-            return createZlibOutputStream(st, false);
-        }
+        public static ZlibOutputStream CreateZlibOutputStream(Stream stream)
+            => CreateZlibOutputStream(stream, false);
 
-        public static AZlibOutputStream createZlibOutputStream(Stream st, bool leaveOpen) {
-            return createZlibOutputStream(st, DeflateCompressLevel.DEFAULT, EDeflateCompressStrategy.Default, leaveOpen);
-        }
+        public static ZlibOutputStream CreateZlibOutputStream(Stream stream, bool leaveOpen)
+            => CreateZlibOutputStream(stream, DeflateCompressLevel.DEFAULT, DeflateCompressStrategy.Default, leaveOpen);
     }
 }
