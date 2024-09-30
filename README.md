@@ -19,17 +19,17 @@ May break support with old .NET versions previously supported.
 LICENSING
 ---------
 
-The `ICSharpCode.SharpZipLib.dll` assembly, provided with this library,
-must be referenced together with `Pngcs.dll` by client projects.
-Because SharpZipLib is released  under the GPL license with an exception
-that allows to link it with independent modules, PNGCS relies on that
+The `ICSharpCode.SharpZipLib.dll` assembly, provided with this library,  
+must be referenced together with `Pngcs.dll` by client projects.  
+Because SharpZipLib is released  under the GPL license with an exception  
+that allows to link it with independent modules, PNGCS relies on that  
 exception and is released under the Apache license. See `LICENSE.txt`.
 
 HISTORY
 -------
 
-See changes.txt in this folder.
+See changes.txt in this folder.  
 
-Hernan J Gonzalez - hgonzalez@gmail.com -  http://stackoverflow.com/users/277304/leonbloy
-Tommy Ettinger - https://github.com/tommyettinger/
+Hernan J Gonzalez - hgonzalez@gmail.com -  http://stackoverflow.com/users/277304/leonbloy  
+Tommy Ettinger - https://github.com/tommyettinger/  
 WarpZephyr - warpzephyr@gmail.com - https://github.com/WarpZephyr/pngcs
